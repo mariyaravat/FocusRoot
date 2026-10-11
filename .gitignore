@@ -1,0 +1,7 @@
+.venv/
+.python_packages/
+__pycache__/
+*.py[cod]
+db.sqlite3
+staticfiles/
+.env

@@ -10,29 +10,42 @@ FocusRoot is a student productivity website that makes studying more fun and les
 - Weekly productivity tracking with graphs
 - Editable user profile
 - Login and signup interface
-- Data storage using LocalStorage
+- Django session authentication and SQLite-backed account data
 
 ## Tech Stack
 
 - HTML
 - CSS
 - JavaScript
-- LocalStorage
+- Django
+- SQLite
+- Browser localStorage for the optional legacy import
 
-## Getting Started
+## Run FocusRoot locally
 
-1. Clone the repository:
+The backend uses Django's built-in authentication and SQLite. On Windows, double-click `run_focusroot.bat`. It creates a virtual environment if needed, installs dependencies, applies database migrations, starts Django, and opens the app in your browser. Keep the server terminal open while using FocusRoot.
 
-   ```bash
-   git clone https://github.com/mariyaravat/FocusRoot
-   Open the project folder.
-2. Run index.html in your browser.
+To set it up manually from PowerShell:
 
-Current Status:
-The project is currently under development. Tasks, focus sessions and profile details are stored using LocalStorage.
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe manage.py migrate
+.\.venv\Scripts\python.exe manage.py runserver
+```
 
-Future Plans:
-Develop the backend using Django
-Integrate a database
-Implement secure authentication
-Connect the frontend with backend APIs
+Then open `http://127.0.0.1:8000/`. Django serves the existing `index.html` and API from one origin, so session cookies and CSRF protection work without a separate CORS setup. Opening `index.html` directly from File Explorer cannot start the Django backend; use the launcher to open the working app.
+
+### API routes
+
+- `GET /api/csrf/` — obtain a CSRF token
+- `POST /api/auth/signup/`, `POST /api/auth/login/`, `POST /api/auth/logout/`
+- `GET/PATCH /api/profile/`
+- `GET/POST /api/tasks/`, `PATCH/DELETE /api/tasks/<id>/`
+- `GET/POST /api/sessions/`
+- `GET /api/summary/`
+- `POST /api/import/local/` — one-time import of tasks and focus sessions from this browser
+
+Tasks and focus sessions are scoped to the signed-in user. Completed tasks award 10 XP and completed focus sessions award XP equal to their duration. Forfeited sessions do not award XP.
+
+The frontend uses Django for accounts, profile changes, tasks, and focus sessions. On login, it offers a one-time import of existing browser tasks and sessions; accepting or declining leaves the original `localStorage` data untouched. Local browser passwords are never imported. The current settings are for local development. Set a private `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=false`, and production `DJANGO_ALLOWED_HOSTS` before deployment.

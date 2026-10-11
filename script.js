@@ -6,6 +6,74 @@ const loginForm=document.getElementById("loginForm");
 const signupForm=document.getElementById("signupForm");
 const authMessage=document.getElementById("authMessage");
 
+const legacyBrowserData={
+    tasks:JSON.parse(localStorage.getItem("focusRootTasks")||"[]"),
+    sessions:JSON.parse(localStorage.getItem("focusRootSessions")||"[]"),
+    profile:JSON.parse(localStorage.getItem("focusRootProfile")||"null")
+};
+let csrfToken="";
+
+async function api(path,{method="GET",body}={}){
+    if(!csrfToken){
+        let tokenResponse;
+        try{tokenResponse=await fetch("/api/csrf/",{credentials:"same-origin"});}
+        catch(error){
+            if(error instanceof TypeError)throw new Error("Open FocusRoot with run_focusroot.bat so Django can provide the backend.");
+            throw error;
+        }
+        const tokenData=await tokenResponse.json();
+        csrfToken=tokenData.csrfToken;
+    }
+    const headers={"Accept":"application/json"};
+    if(body!==undefined)headers["Content-Type"]="application/json";
+    if(method!=="GET")headers["X-CSRFToken"]=csrfToken;
+    let response;
+    try{
+        response=await fetch(path,{method,credentials:"same-origin",headers,body:body===undefined?undefined:JSON.stringify(body)});
+    }catch(error){
+        if(error instanceof TypeError){
+            throw new Error("Cannot reach the FocusRoot backend. Start Django with `python manage.py runserver`, then open http://127.0.0.1:8000/.");
+        }
+        throw error;
+    }
+    const data=await response.json().catch(()=>({error:"The server returned an unreadable response."}));
+    if(data.csrfToken)csrfToken=data.csrfToken;
+    if(!response.ok)throw new Error(data.error||"The request could not be completed.");
+    return data;
+}
+
+function showAuthError(error){setAuthMessage(error.message||"Could not connect to FocusRoot. Please try again.");}
+
+async function loadAccountData(){
+    const [profileData,taskData,sessionData]=await Promise.all([
+        api("/api/profile/"),api("/api/tasks/"),api("/api/sessions/")
+    ]);
+    profile=profileData;
+    tasks=taskData.tasks;
+    focusSessions=sessionData.sessions;
+    showProfile();
+    renderTasks();updateTimerTasks();updateGarden();updateStats();updateWeeklyProgress();
+}
+
+async function offerBrowserImport(){
+    if(!legacyBrowserData.tasks.length&&!legacyBrowserData.sessions.length)return;
+    const marker="focusRootImportOffered";
+    if(localStorage.getItem(marker)==="done")return;
+    const priorEmail=legacyBrowserData.profile?.email;
+    const accountNote=priorEmail?` The saved profile was ${priorEmail}.`:"";
+    const shouldImport=confirm(`Found ${legacyBrowserData.tasks.length} saved task(s) and ${legacyBrowserData.sessions.length} focus session(s) in this browser.${accountNote}\n\nImport them into this account? Your browser copy will remain as a backup.`);
+    localStorage.setItem(marker,"done");
+    if(!shouldImport)return;
+    try{
+        const result=await api("/api/import/local/",{method:"POST",body:{tasks:legacyBrowserData.tasks,sessions:legacyBrowserData.sessions}});
+        await loadAccountData();
+        setAuthMessage(result.alreadyImported?"Browser data was already imported into this account.":`Imported ${result.tasks} task(s) and ${result.sessions} focus session(s).`,"success");
+    }catch(error){
+        localStorage.removeItem(marker);
+        setAuthMessage(error.message);
+    }
+}
+
 const dialogOrigins=new WeakMap();
 
 function openDialog(dialog,opener=document.activeElement,preferredFocus=null){
@@ -74,11 +142,7 @@ day:"numeric",
 month:"long"
 });
 
-let profile=JSON.parse(localStorage.getItem("focusRootProfile"))||{
-name:"Anaya"
-};
-
-localStorage.setItem("focusRootProfile",JSON.stringify(profile));
+let profile={name:"",email:""};
 
 function showProfile(){
     const name=profile.name||"Anaya";
@@ -152,54 +216,16 @@ saveProfileBtn.addEventListener("click",()=>{
         return;
     }
 
-    const users=JSON.parse(localStorage.getItem("focusRootUsers"))||[];
-    const loggedInEmail=localStorage.getItem("focusRootLoggedIn");
-    const currentUser=users.find(user=>user.email===loggedInEmail);
-    if(users.some(user=>user.email===email&&user.email!==loggedInEmail)){
-        profileMessage.textContent="An account with this email already exists.";
-        profileMessage.classList.remove("success-message");
-        document.getElementById("editEmail").focus();
-        return;
-    }
-
-    profile={...profile,name,email};
-    localStorage.setItem("focusRootProfile",JSON.stringify(profile));
-    if(currentUser){
-        currentUser.name=name;
-        currentUser.email=email;
-        localStorage.setItem("focusRootUsers",JSON.stringify(users));
-        localStorage.setItem("focusRootLoggedIn",email);
-    }
-
-    showProfile();
-    document.getElementById("profileDetailsMessage").textContent="Profile saved successfully.";
-    closeProfileModal();
+    saveProfileBtn.disabled=true;
+    api("/api/profile/",{method:"PATCH",body:{name,email}}).then(updated=>{
+        profile=updated;showProfile();
+        document.getElementById("profileDetailsMessage").textContent="Profile saved successfully.";
+        closeProfileModal();
+    }).catch(error=>{profileMessage.textContent=error.message;profileMessage.classList.remove("success-message");})
+      .finally(()=>saveProfileBtn.disabled=false);
 });
 
-let savedTasks=localStorage.getItem("focusRootTasks");
-
-let tasks=savedTasks?JSON.parse(savedTasks):[
-{
-id:1,
-name:"Complete DBMS Assignment",
-subject:"DBMS",
-priority:"High",
-date:todayDate,
-done:true,
-completedDate:todayDate
-},
-{
-id:2,
-name:"Practice JavaScript",
-subject:"Development",
-priority:"Medium",
-date:todayDate,
-done:false,
-completedDate:null
-}
-];
-
-localStorage.setItem("focusRootTasks",JSON.stringify(tasks));
+let tasks=[];
 
 const modal=document.getElementById("modal");
 const addBtn=document.getElementById("addBtn");
@@ -237,7 +263,7 @@ document.getElementById("modalTitle").textContent="Add Task";
 saveBtn.textContent="Add Task";
 }
 
-saveBtn.addEventListener("click",()=>{
+saveBtn.addEventListener("click",async()=>{
 const name=document.getElementById("taskName").value.trim();
 const subject=document.getElementById("subject").value.trim();
 const date=document.getElementById("taskDate").value;
@@ -257,30 +283,15 @@ document.getElementById("taskDate").focus();
 return;
 }
 
-if(editingTaskId!==null){
-const task=tasks.find(task=>task.id===editingTaskId);
-
-if(!task){
-return;
-}
-
-task.name=name;
-task.subject=subject||"General";
-task.date=date;
-task.priority=priority;
-}else{
-tasks.push({
-id:Date.now(),
-name:name,
-subject:subject||"General",
-priority:priority,
-date:date,
-done:false,
-completedDate:null
-});
-}
-
-localStorage.setItem("focusRootTasks",JSON.stringify(tasks));
+try{
+    if(editingTaskId!==null){
+        const updated=await api(`/api/tasks/${editingTaskId}/`,{method:"PATCH",body:{name,subject:subject||"General",date,priority}});
+        tasks=tasks.map(task=>task.id===updated.id?updated:task);
+    }else{
+        const created=await api("/api/tasks/",{method:"POST",body:{name,subject:subject||"General",date,priority}});
+        tasks.push(created);
+    }
+}catch(error){taskMessage.textContent=error.message;return;}
 
 closeModal();
 renderTasks();
@@ -366,22 +377,17 @@ deleteTask(task.id);
 return div;
 }
 
-function completeTask(id){
+async function completeTask(id){
 const task=tasks.find(task=>task.id===id);
 
 if(!task){
 return;
 }
 
-task.done=!task.done;
-
-if(task.done){
-task.completedDate=getToday();
-}else{
-task.completedDate=null;
-}
-
-localStorage.setItem("focusRootTasks",JSON.stringify(tasks));
+try{
+    const updated=await api(`/api/tasks/${id}/`,{method:"PATCH",body:{done:!task.done,completedDate:!task.done?getToday():null}});
+    tasks=tasks.map(item=>item.id===id?updated:item);
+}catch(error){alert(error.message);return;}
 
 renderTasks();
 updateTimerTasks();
@@ -407,13 +413,14 @@ document.getElementById("taskMessage").textContent="";
 openDialog(modal,document.activeElement);
 }
 
-function deleteTask(id){
+async function deleteTask(id){
 if(!confirm("Delete this task?")){
 return;
 }
 
+try{await api(`/api/tasks/${id}/`,{method:"DELETE"});}
+catch(error){alert(error.message);return;}
 tasks=tasks.filter(task=>task.id!==id);
-localStorage.setItem("focusRootTasks",JSON.stringify(tasks));
 
 renderTasks();
 updateTimerTasks();
@@ -431,9 +438,7 @@ monday.setDate(date.getDate()-(day===0?6:day-1));
 return monday.getFullYear()+"-"+String(monday.getMonth()+1).padStart(2,"0")+"-"+String(monday.getDate()).padStart(2,"0");
 }
 
-let focusSessions=JSON.parse(localStorage.getItem("focusRootSessions"))||[];
-
-localStorage.setItem("focusRootSessions",JSON.stringify(focusSessions));
+let focusSessions=[];
 
 function getPlant(duration,forfeited){
 if(forfeited){
@@ -593,7 +598,7 @@ lockTimer();
 forfeit.disabled=false;
 start.textContent="Pause";
 
-timer=setInterval(()=>{
+timer=setInterval(async()=>{
 timeLeft--;
 updateTimer();
 
@@ -602,30 +607,16 @@ clearInterval(timer);
 timer=null;
 
 const selectedTask=tasks.find(task=>task.id===Number(timerTask.value));
-
 if(selectedTask){
-selectedTask.done=true;
-selectedTask.completedDate=getToday();
-
 const duration=Number(timerDuration.value);
-
-focusSessions.push({
-taskId:selectedTask.id,
-duration:duration,
-status:"completed",
-plant:getPlant(duration,false),
-date:getToday(),
-week:getWeekKey()
-});
-
-localStorage.setItem("focusRootSessions",JSON.stringify(focusSessions));
-
-timerMessage.textContent="Focus session completed! You earned "+duration+" XP 🌱";
-
+try{
+    const result=await api("/api/sessions/",{method:"POST",body:{taskId:selectedTask.id,duration,status:"completed"}});
+    focusSessions.unshift(result.session);
+    tasks=tasks.map(task=>task.id===result.task.id?result.task:task);
+    timerMessage.textContent="Focus session completed! You earned "+duration+" XP 🌱";
+}catch(error){timerMessage.textContent=error.message;}
 updateGarden();
 }
-
-localStorage.setItem("focusRootTasks",JSON.stringify(tasks));
 
 start.textContent="Start Focus";
 forfeit.disabled=true;
@@ -662,22 +653,12 @@ const selectedTask=timerTask.value;
 const duration=Number(timerDuration.value);
 
 if(selectedTask){
-focusSessions.push({
-taskId:Number(selectedTask),
-duration:duration,
-status:"forfeited",
-plant:getPlant(duration,true),
-date:getToday(),
-week:getWeekKey()
-});
-
-localStorage.setItem("focusRootSessions",JSON.stringify(focusSessions));
-
-updateGarden();
-updateStats();
+    api("/api/sessions/",{method:"POST",body:{taskId:Number(selectedTask),duration,status:"forfeited"}})
+      .then(result=>{focusSessions.unshift(result.session);updateGarden();updateStats();})
+      .catch(error=>{timerMessage.textContent=error.message;});
 }
 
-timerMessage.textContent="Focus session forfeited. A dead plant was added 🥀";
+if(selectedTask)timerMessage.textContent="Focus session forfeited. A dead plant was added 🥀";
 
 resetTimer();
 unlockTimer();
@@ -823,7 +804,7 @@ document.getElementById("showLogin").addEventListener("click",()=>{
     input.addEventListener("input",()=>setAuthMessage(""));
 });
 
-signupForm.addEventListener("submit",e=>{
+signupForm.addEventListener("submit",async e=>{
     e.preventDefault();
 
     const name=document.getElementById("signupName").value.trim();
@@ -841,71 +822,46 @@ signupForm.addEventListener("submit",e=>{
         return;
     }
 
-    if(password.length<6){
-        setAuthMessage("Password must contain at least 6 characters.");
-        return;
-    }
+    if(password.length<8){setAuthMessage("Password must contain at least 8 characters.");return;}
 
     if(password!==confirmPassword){
         setAuthMessage("Passwords do not match.");
         return;
     }
 
-    const users=JSON.parse(localStorage.getItem("focusRootUsers"))||[];
-
-    if(users.some(item=>item.email===email)){
-        setAuthMessage("An account with this email already exists.");
-        return;
-    }
-
-    const user={name,email,password};
-
-    users.push(user);
-
-    localStorage.setItem("focusRootUsers",JSON.stringify(users));
-
-    loginForm.hidden=false;
-    signupForm.hidden=true;
-    document.getElementById("loginEmail").value=email;
-    document.getElementById("loginPassword").value="";
-    setAuthMessage("Account created. Please log in to continue.","success");
+    try{
+        await api("/api/auth/signup/",{method:"POST",body:{name,email,password}});
+        loginForm.hidden=false;signupForm.hidden=true;
+        document.getElementById("loginEmail").value=email;
+        document.getElementById("loginPassword").value="";
+        setAuthMessage("Account created. Please log in to continue.","success");
+    }catch(error){showAuthError(error);}
 });
 
-loginForm.addEventListener("submit",e=>{
+loginForm.addEventListener("submit",async e=>{
     e.preventDefault();
 
     const email=document.getElementById("loginEmail").value.trim().toLowerCase();
     const password=document.getElementById("loginPassword").value;
 
-    const users=JSON.parse(localStorage.getItem("focusRootUsers"))||[];
-
-    const user=users.find(item=>item.email===email&&item.password===password);
-
-    if(!user){
-        setAuthMessage("Email or password is incorrect. If you are new, please sign up.");
-        return;
-    }
-
-    setAuthMessage("");
-    enterApp(user);
+    try{
+        await api("/api/auth/login/",{method:"POST",body:{email,password}});
+        await enterApp();
+    }catch(error){showAuthError(error);}
 });
 
-function enterApp(user){
-    profile={name:user.name,email:user.email};
-
-    localStorage.setItem("focusRootProfile",JSON.stringify(profile));
-    localStorage.setItem("focusRootLoggedIn",user.email);
-
-    showProfile();
-
-    authPage.hidden=true;
-    app.hidden=false;
-
-    updateStats();
+async function enterApp(){
+    try{
+        await loadAccountData();
+        authPage.hidden=true;app.hidden=false;setAuthMessage("");
+        await offerBrowserImport();
+        renderTasks();updateTimerTasks();updateGarden();updateStats();updateWeeklyProgress();
+    }catch(error){showAuthError(error);}
 }
 
-document.getElementById("logoutBtn").addEventListener("click",()=>{
-    localStorage.removeItem("focusRootLoggedIn");
+document.getElementById("logoutBtn").addEventListener("click",async()=>{
+    try{await api("/api/auth/logout/",{method:"POST"});}
+    catch(error){document.getElementById("profileDetailsMessage").textContent=error.message;return;}
 
     profileDetailsModal.classList.remove("show");
     app.hidden=true;
@@ -917,14 +873,8 @@ document.getElementById("logoutBtn").addEventListener("click",()=>{
     setAuthMessage("You have logged out.","success");
 });
 
-renderTasks();
-updateTimerTasks();
 updateTimer();
-updateGarden();
-updateGardenPercentage();
-updateStats();
-updateWeeklyProgress();
 forfeit.disabled=true;
-localStorage.removeItem("focusRootLoggedIn");
 authPage.hidden=false;
 app.hidden=true;
+if(location.protocol==="file:")setAuthMessage("To use Django accounts and SQLite, start FocusRoot with run_focusroot.bat. Opening this file directly cannot start the backend.");

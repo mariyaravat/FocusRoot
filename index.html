@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>FocusRoot</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <section id="authPage" class="auth-page">
+    <div class="auth-card">
+        <div class="auth-logo">🌱</div>
+        <h1>FocusRoot</h1>
+        <p class="auth-subtitle">Small steps every day grow into something bigger.</p>
+
+        <form id="loginForm">
+            <h2>Welcome back</h2>
+
+            <label for="loginEmail">Email</label>
+            <input id="loginEmail" type="email" placeholder="you@example.com" required>
+
+            <label for="loginPassword">Password</label>
+            <input id="loginPassword" type="password" placeholder="Enter your password" required>
+
+            <button class="auth-submit" type="submit">Login</button>
+
+            <p class="auth-switch">
+                Don't have an account?
+                <button type="button" id="showSignup">Sign up</button>
+            </p>
+        </form>
+
+        <form id="signupForm" hidden>
+            <h2>Create your account</h2>
+
+            <label for="signupName">Name</label>
+            <input id="signupName" type="text" placeholder="Your name" required>
+
+            <label for="signupEmail">Email</label>
+            <input id="signupEmail" type="email" placeholder="you@example.com" required>
+
+            <label for="signupPassword">Password</label>
+            <input id="signupPassword" type="password" minlength="6" required>
+
+            <label for="confirmPassword">Confirm password</label>
+            <input id="confirmPassword" type="password" required>
+
+            <button class="auth-submit" type="submit">Create Account</button>
+
+            <p class="auth-switch">
+                Already have an account?
+                <button type="button" id="showLogin">Login</button>
+            </p>
+        </form>
+
+        <p id="authMessage" class="auth-message" role="status" aria-live="polite"></p>
+    </div>
+    </section>
+    <div id="app" class="container" hidden>
+        <aside class="sidebar">
+        <div class="logo"><img src="logo.png" alt="FocusRoot"></div>
+        <nav>
+        <button class="nav active" data-page="dashboard">🏠 Dashboard</button>
+        <button class="nav" data-page="tasks">✓ Tasks</button>
+        <button class="nav" data-page="garden">🌱 My Garden</button>
+        <button class="nav" data-page="timer">⏱ Focus Timer</button>
+        </nav>
+        <button class="profile-trigger" id="profileTrigger" type="button" aria-label="View profile details">
+            <span class="profile-icon">👤</span>
+            <span class="profile-info">
+                <b id="profileName">Anaya</b>
+                <small id="profileLevel">Level 1</small>
+            </span>
+            <span class="profile-chevron" aria-hidden="true">⌃</span>
+        </button>
+    </aside>
+
+<main>
+<header>
+    <span id="date"></span>
+    <div>🔔　<button id="headerProfileTrigger" type="button" class="user" aria-label="View profile details">A</button></div>
+</header>
+
+<section id="dashboard" class="page active">
+<div class="welcome">
+<div>
+<small>WELCOME BACK, <span id="welcomeName">ANAYA</span> 🌱</small>
+<h1>Let's grow something<br><em>great today.</em></h1>
+<p>Small steps every day become something bigger.</p>
+</div>
+<div class="streak">
+🔥
+<div>
+<small>Current Streak</small>
+<b id="streak">0 Days</b>
+</div>
+</div>
+</div>
+
+<div class="stats">
+<div>
+<span>Tasks Done</span>
+<b id="done">0</b>
+<small>Keep going!</small>
+</div>
+<div>
+<span>XP Points</span>
+<b id="xp">0</b>
+<small id="nextLevel">100 to next level</small>
+</div>
+<div>
+<span>Focus Time</span>
+<b id="focusTime">0m</b>
+<small>This week</small>
+</div>
+</div>
+
+<div class="dashboard-grid">
+
+<div class="card">
+<div class="title">
+<div>
+<small>TODAY</small>
+<h2>Today's Tasks</h2>
+</div>
+<button id="addBtn">+ Add Task</button>
+</div>
+<div id="taskList"></div>
+</div>
+
+<div class="card">
+<div class="title">
+<div>
+<small>BACKLOG</small>
+<h2>Pending Tasks</h2>
+</div>
+</div>
+<div id="pendingList"></div>
+</div>
+
+<div class="card garden">
+<div class="title">
+<div>
+<small>YOUR PROGRESS</small>
+<h2>My Garden</h2>
+</div>
+<span id="gardenPercent">0%</span>
+</div>
+<div class="garden-box">
+☀️
+<div class="plants" id="gardenPlants"></div>
+</div>
+<div class="progress">
+<div id="gardenProgress"></div>
+</div>
+<p>Complete focus sessions to grow your garden.</p>
+</div>
+
+<div class="card weekly">
+<div class="heading">
+<small>THIS WEEK</small>
+<h2>Weekly Progress</h2>
+</div>
+<div class="weekly-chart">
+<div id="weeklyBars" class="bars"></div>
+<div id="weeklyDays" class="weekly-days"></div>
+</div>
+</div>
+
+</div>
+</section>
+
+<section id="tasks" class="page">
+<div class="heading">
+<small>PRODUCTIVITY</small>
+<h1>My Tasks</h1>
+<p>Add your daily tasks and keep track of them.</p>
+</div>
+<div class="card">
+<div id="allTasks"></div>
+</div>
+</section>
+
+<section id="garden" class="page">
+<div class="heading">
+<small>YOUR PROGRESS</small>
+<h1>My Garden 🌱</h1>
+<p>Your garden grows as you stay consistent.</p>
+</div>
+<div class="big-garden">
+☀️
+<div id="bigGardenPlants"></div>
+</div>
+</section>
+
+<section id="timer" class="page">
+<div class="heading center">
+<small>DEEP WORK</small>
+<h1>Focus Timer</h1>
+<p>Focus on one thing at a time.</p>
+</div>
+
+<div class="timer card">
+<label>Select Task</label>
+<select id="timerTask">
+<option value="">Choose today's task</option>
+</select>
+
+<label>Focus Time</label>
+<select id="timerDuration">
+<option value="1">1 minutes</option>
+<option value="5">5 minutes</option>
+<option value="15">15 minutes</option>
+<option value="25" selected>25 minutes</option>
+<option value="45">45 minutes</option>
+<option value="60">60 minutes</option>
+</select>
+
+<div id="time">25:00</div>
+
+<button id="start">Start Focus</button>
+<button id="forfeit">Forfeit</button>
+<button id="reset">Reset</button>
+
+<p id="timerMessage"></p>
+</div>
+</section>
+</main>
+</div>
+
+<div id="modal" class="modal">
+<div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+<button id="close" type="button" aria-label="Close task dialog">×</button>
+<h2 id="modalTitle">Add Task</h2>
+<label for="taskName">Task name</label>
+<input id="taskName" placeholder="Task name">
+<label for="subject">Subject</label>
+<input id="subject" placeholder="Subject">
+<label for="taskDate">Due date</label>
+<input type="date" id="taskDate">
+
+<label for="priority">Priority</label>
+<select id="priority">
+<option>Low</option>
+<option selected>Medium</option>
+<option>High</option>
+</select>
+
+<p id="taskMessage" class="form-message" role="alert" aria-live="assertive"></p>
+<button id="save">Add Task</button>
+</div>
+</div>
+<div id="profileModal" class="modal">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="editProfileTitle">
+        <button id="closeProfile" type="button" aria-label="Close edit profile dialog">×</button>
+
+        <h2 id="editProfileTitle">Edit Profile</h2>
+
+        <label for="editName">Name</label>
+        <input id="editName" placeholder="Your name">
+
+        <label for="editEmail">Email</label>
+        <input id="editEmail" type="email" placeholder="you@example.com">
+
+        <p id="profileMessage" class="form-message" role="status" aria-live="polite"></p>
+        <button id="saveProfile" type="button">Save Profile</button>
+    </div>
+</div>
+<div id="profileDetailsModal" class="modal">
+    <div class="modal-box profile-details-box" role="dialog" aria-modal="true" aria-labelledby="profileDetailsTitle">
+        <button id="closeProfileDetails" type="button" class="modal-close" aria-label="Close">×</button>
+        <div class="profile-details-avatar" id="profileDetailsAvatar">A</div>
+        <p class="profile-eyebrow">YOUR ACCOUNT</p>
+        <h2 id="profileDetailsTitle">Profile details</h2>
+        <div class="profile-detail-row"><span>Name</span><b id="profileDetailsName"></b></div>
+        <div class="profile-detail-row"><span>Email</span><b id="profileDetailsEmail"></b></div>
+        <p id="profileDetailsMessage" class="form-message success-message" role="status" aria-live="polite"></p>
+        <div class="profile-detail-actions">
+            <button id="editProfileBtn" type="button">Edit profile</button>
+            <button id="logoutBtn" type="button" class="logout-btn">Log out</button>
+        </div>
+    </div>
+</div>
+<script src="script.js"></script>
+</body>
+</html>
